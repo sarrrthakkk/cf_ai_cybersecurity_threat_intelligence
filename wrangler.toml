@@ -1,0 +1,45 @@
+name = "cf-ai-cybersecurity-threat-intelligence"
+main = "src/workers/main.js"
+compatibility_date = "2024-01-01"
+account_id = "084ba993d2dd0763d0de25695d423147"
+
+# Workers AI Configuration
+[ai]
+binding = "AI"
+
+# Durable Objects Configuration
+[[durable_objects.bindings]]
+name = "THREAT_DATABASE"
+class_name = "ThreatDatabase"
+
+[[durable_objects.bindings]]
+name = "SESSION_MANAGER"
+class_name = "SessionManager"
+
+[[durable_objects.bindings]]
+name = "WORKFLOW_ENGINE"
+class_name = "WorkflowEngine"
+
+# Add migrations for Durable Objects
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ThreatDatabase", "SessionManager", "WorkflowEngine"]
+
+# Environment Variables
+[vars]
+ENVIRONMENT = "development"
+MAX_THREAT_ANALYSIS_TIME = "30000"
+THREAT_FEED_UPDATE_INTERVAL = "300000"
+AI_MAX_TOKENS = "2048"
+AI_TEMPERATURE = "0.7"
+
+# KV Namespaces (will be created automatically)
+# [[kv_namespaces]]
+# binding = "THREAT_CACHE"
+# id = ""
+# preview_id = ""
+
+# R2 Buckets (will be created automatically)
+# [[r2_buckets]]
+# binding = "THREAT_STORAGE"
+# bucket_name = "threat-intelligence-storage"

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-Powered Cybersecurity Threat Intelligence Platform</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-shield-alt"></i>
+                    <h1>CyberThreat AI</h1>
+                </div>
+                <div class="header-controls">
+                    <button id="voiceToggle" class="voice-toggle" title="Toggle Voice Input">
+                        <i class="fas fa-microphone"></i>
+                    </button>
+                    <button id="settingsToggle" class="settings-toggle" title="Settings">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                    <div class="status-indicator">
+                        <span class="status-dot" id="statusDot"></span>
+                        <span id="statusText">Connected</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-section">
+                    <h3>Threat Dashboard</h3>
+                    <div class="threat-stats">
+                        <div class="stat-item">
+                            <span class="stat-number" id="activeThreats">0</span>
+                            <span class="stat-label">Active Threats</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-number" id="riskLevel">Low</span>
+                            <span class="stat-label">Risk Level</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-number" id="threatsToday">0</span>
+                            <span class="stat-label">Today</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>Quick Actions</h3>
+                    <div class="quick-actions">
+                        <button class="action-btn" data-action="analyze-ip">
+                            <i class="fas fa-search"></i>
+                            Analyze IP
+                        </button>
+                        <button class="action-btn" data-action="scan-domain">
+                            <i class="fas fa-globe"></i>
+                            Scan Domain
+                        </button>
+                        <button class="action-btn" data-action="check-hash">
+                            <i class="fas fa-fingerprint"></i>
+                            Check Hash
+                        </button>
+                        <button class="action-btn" data-action="generate-report">
+                            <i class="fas fa-file-alt"></i>
+                            Generate Report
+                        </button>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>Recent Threats</h3>
+                    <div class="recent-threats" id="recentThreats">
+                        <!-- Dynamic content -->
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Chat Interface -->
+            <section class="chat-section">
+                <div class="chat-header">
+                    <h2>AI Threat Analyst</h2>
+                    <div class="chat-controls">
+                        <button id="clearChat" class="clear-btn" title="Clear Chat">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        <button id="exportChat" class="export-btn" title="Export Chat">
+                            <i class="fas fa-download"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="chat-messages" id="chatMessages">
+                    <div class="message ai-message">
+                        <div class="message-avatar">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <div class="message-content">
+                            <div class="message-text">
+                                Welcome to CyberThreat AI! I'm your AI-powered cybersecurity analyst. 
+                                I can help you analyze threats, investigate incidents, and provide security recommendations.
+                                
+                                <br><br>
+                                <strong>What can I help you with today?</strong>
+                                <ul>
+                                    <li>Analyze suspicious IP addresses or domains</li>
+                                    <li>Investigate malware samples or file hashes</li>
+                                    <li>Generate security reports</li>
+                                    <li>Provide threat intelligence insights</li>
+                                    <li>Create incident response plans</li>
+                                </ul>
+                            </div>
+                            <div class="message-time">Just now</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chat-input-container">
+                    <div class="input-wrapper">
+                        <textarea 
+                            id="chatInput" 
+                            placeholder="Ask me about threats, analyze suspicious activity, or request security insights..."
+                            rows="3"
+                        ></textarea>
+                        <div class="input-controls">
+                            <button id="attachFile" class="attach-btn" title="Attach File">
+                                <i class="fas fa-paperclip"></i>
+                            </button>
+                            <button id="sendMessage" class="send-btn" title="Send Message">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="voice-input" id="voiceInput" style="display: none;">
+                        <div class="voice-visualizer">
+                            <div class="voice-bar"></div>
+                            <div class="voice-bar"></div>
+                            <div class="voice-bar"></div>
+                            <div class="voice-bar"></div>
+                            <div class="voice-bar"></div>
+                        </div>
+                        <p>Listening... Speak your security query</p>
+                        <button id="stopVoice" class="stop-voice-btn">
+                            <i class="fas fa-stop"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Threat Analysis Panel -->
+            <aside class="analysis-panel" id="analysisPanel">
+                <div class="panel-header">
+                    <h3>Threat Analysis</h3>
+                    <button id="closeAnalysis" class="close-btn">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="panel-content" id="analysisContent">
+                    <!-- Dynamic analysis content -->
+                </div>
+            </aside>
+        </main>
+
+        <!-- Settings Modal -->
+        <div class="modal" id="settingsModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Settings</h2>
+                    <button class="close-btn" id="closeSettings">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="setting-group">
+                        <label for="aiModel">AI Model</label>
+                        <select id="aiModel">
+                            <option value="llama-3.3-70b-instruct">Llama 3.3 70B</option>
+                            <option value="llama-3.1-8b-instruct">Llama 3.1 8B</option>
+                        </select>
+                    </div>
+                    <div class="setting-group">
+                        <label for="responseLength">Response Length</label>
+                        <select id="responseLength">
+                            <option value="short">Short</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="long">Long</option>
+                        </select>
+                    </div>
+                    <div class="setting-group">
+                        <label for="voiceEnabled">Voice Input</label>
+                        <input type="checkbox" id="voiceEnabled" checked>
+                    </div>
+                    <div class="setting-group">
+                        <label for="notifications">Notifications</label>
+                        <input type="checkbox" id="notifications" checked>
+                    </div>
+                    <div class="setting-group">
+                        <label for="theme">Theme</label>
+                        <select id="theme">
+                            <option value="dark" selected>Dark</option>
+                            <option value="light">Light</option>
+                            <option value="auto">Auto</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" id="saveSettings">Save Settings</button>
+                    <button class="btn btn-secondary" id="cancelSettings">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="loading-spinner">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Analyzing threat data...</p>
+            </div>
+        </div>
+
+        <!-- Toast Notifications -->
+        <div class="toast-container" id="toastContainer"></div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script src="js/chat.js"></script>
+    <script src="js/voice.js"></script>
+    <script src="js/threat-analysis.js"></script>
+    <script src="js/ui.js"></script>
+</body>
+</html>

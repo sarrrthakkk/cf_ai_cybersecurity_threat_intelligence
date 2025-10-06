@@ -274,7 +274,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For support and questions:
 - Create an issue in this repository
-- Contact: [your-email@example.com]
+- Contact: [msarthak2199@gmail.com]
 - Documentation: See LOCAL-DEVELOPMENT.md for detailed setup
 
 ---

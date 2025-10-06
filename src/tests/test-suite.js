@@ -1,9 +1,9 @@
 // Test suite for AI-Powered Cybersecurity Threat Intelligence Platform
 // Tests all core functionality including AI integration, workflows, and state management
 
-import { ThreatDatabase } from './src/durable-objects/threat-database.js';
-import { SessionManager } from './src/durable-objects/session-manager.js';
-import { WorkflowEngine } from './src/durable-objects/workflow-engine.js';
+import { ThreatDatabase } from '../durable-objects/threat-database.js';
+import { SessionManager } from '../durable-objects/session-manager.js';
+import { WorkflowEngine } from '../durable-objects/workflow-engine.js';
 
 // Mock environment for testing
 const mockEnv = {

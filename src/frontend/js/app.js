@@ -19,7 +19,6 @@ class CyberThreatAI {
     this.updateThreatStats();
     this.loadRecentThreats();
     
-    // Update stats every 30 seconds
     setInterval(() => {
       this.updateThreatStats();
       this.loadRecentThreats();
@@ -31,7 +30,6 @@ class CyberThreatAI {
   }
 
   setupEventListeners() {
-    // Chat input
     const chatInput = document.getElementById('chatInput');
     const sendBtn = document.getElementById('sendMessage');
     
@@ -44,7 +42,6 @@ class CyberThreatAI {
     
     sendBtn.addEventListener('click', () => this.sendMessage());
 
-    // Quick actions
     document.querySelectorAll('.action-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const action = e.currentTarget.dataset.action;
@@ -52,14 +49,12 @@ class CyberThreatAI {
       });
     });
 
-    // Voice controls
     const voiceToggle = document.getElementById('voiceToggle');
     const stopVoice = document.getElementById('stopVoice');
     
     voiceToggle.addEventListener('click', () => this.toggleVoiceInput());
     stopVoice.addEventListener('click', () => this.stopVoiceInput());
 
-    // Settings
     const settingsToggle = document.getElementById('settingsToggle');
     const closeSettings = document.getElementById('closeSettings');
     const saveSettings = document.getElementById('saveSettings');
@@ -68,15 +63,12 @@ class CyberThreatAI {
     closeSettings.addEventListener('click', () => this.closeSettings());
     saveSettings.addEventListener('click', () => this.saveSettings());
 
-    // Analysis panel
     const closeAnalysis = document.getElementById('closeAnalysis');
     closeAnalysis.addEventListener('click', () => this.closeAnalysisPanel());
 
-    // Clear chat
     const clearChat = document.getElementById('clearChat');
     clearChat.addEventListener('click', () => this.clearChat());
 
-    // Export chat
     const exportChat = document.getElementById('exportChat');
     exportChat.addEventListener('click', () => this.exportChat());
   }
@@ -87,15 +79,12 @@ class CyberThreatAI {
     
     if (!message) return;
 
-    // Add user message to chat
     this.addMessageToChat(message, 'user');
     chatInput.value = '';
 
-    // Show loading
     this.showLoading('Analyzing your request...');
 
     try {
-      // Send to AI
       const response = await fetch(`${this.apiBase}/chat`, {
         method: 'POST',
         headers: {
@@ -112,7 +101,6 @@ class CyberThreatAI {
       if (data.success) {
         this.addMessageToChat(data.response, 'ai');
         
-        // Check if response contains threat analysis
         if (this.containsThreatData(data.response)) {
           this.showAnalysisPanel(data.response);
         }
@@ -150,7 +138,6 @@ class CyberThreatAI {
   }
 
   formatMessage(message) {
-    // Convert markdown-like formatting to HTML
     return message
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
@@ -178,11 +165,11 @@ class CyberThreatAI {
     }
   }
 
-  promptForInput(prompt, type) {
-    const input = prompt(prompt);
+  promptForInput(message, type) {
+    const input = window.prompt(message);
     if (input) {
-      const message = `Please analyze this ${type}: ${input}`;
-      document.getElementById('chatInput').value = message;
+      const composedMessage = `Please analyze this ${type}: ${input}`;
+      document.getElementById('chatInput').value = composedMessage;
       this.sendMessage();
     }
   }
@@ -244,7 +231,6 @@ class CyberThreatAI {
         document.getElementById('threatsToday').textContent = todayThreats;
         document.getElementById('riskLevel').textContent = riskLevel;
         
-        // Update risk level styling
         const riskElement = document.getElementById('riskLevel');
         riskElement.className = `stat-number ${riskLevel.toLowerCase()}-risk`;
       }
@@ -301,10 +287,6 @@ class CyberThreatAI {
         <div class="detail-item">
           <label>Detected:</label>
           <span>${new Date(threat.timestamp).toLocaleString()}</span>
-        </div>
-        <div class="detail-item">
-          <label>Source:</label>
-          <span>${threat.source || 'Unknown'}</span>
         </div>
         ${threat.description ? `
           <div class="detail-item">
@@ -370,7 +352,6 @@ class CyberThreatAI {
       this.isConnected = false;
       this.updateConnectionStatus(false);
       
-      // Reconnect after 5 seconds
       setTimeout(() => {
         this.initializeWebSocket();
       }, 5000);
@@ -438,7 +419,6 @@ class CyberThreatAI {
     voiceToggle.classList.add('active');
     voiceInput.style.display = 'block';
     
-    // Initialize speech recognition
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const recognition = new SpeechRecognition();
@@ -578,10 +558,8 @@ class CyberThreatAI {
     
     container.appendChild(toast);
     
-    // Trigger animation
     setTimeout(() => toast.classList.add('show'), 100);
     
-    // Auto remove after 5 seconds
     setTimeout(() => {
       toast.classList.remove('show');
       setTimeout(() => toast.remove(), 300);
@@ -589,7 +567,6 @@ class CyberThreatAI {
   }
 }
 
-// Initialize the application when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
   window.cyberThreatAI = new CyberThreatAI();
 });

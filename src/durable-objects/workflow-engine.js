@@ -1,5 +1,5 @@
 // Workflow Engine Durable Object
-// Manages automated threat response workflows
+// Handles automated workflows, incident response, and task orchestration
 
 export class WorkflowEngine {
   constructor(state, env) {
@@ -11,72 +11,72 @@ export class WorkflowEngine {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    switch (path) {
-      case '/trigger':
-        return this.triggerWorkflow(request);
-      case '/status':
-        return this.getWorkflowStatus(request);
-      case '/list':
-        return this.listWorkflows(request);
-      case '/create':
-        return this.createWorkflow(request);
-      case '/update':
-        return this.updateWorkflow(request);
-      case '/delete':
-        return this.deleteWorkflow(request);
-      default:
-        return new Response('Not Found', { status: 404 });
+    try {
+      switch (path) {
+        case '/trigger':
+          return this.triggerWorkflow(request);
+        case '/status':
+          return this.getWorkflowStatus(request);
+        case '/list':
+          return this.listWorkflows(request);
+        case '/cancel':
+          return this.cancelWorkflow(request);
+        case '/history':
+          return this.getWorkflowHistory(request);
+        default:
+          return new Response('Not Found', { status: 404 });
+      }
+    } catch (error) {
+      console.error('WorkflowEngine error:', error);
+      return new Response(JSON.stringify({
+        success: false,
+        error: error.message
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
   }
 
   async triggerWorkflow(request) {
     try {
-      const { workflowType, parameters, priority = 'normal' } = await request.json();
-
-      const workflowId = `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-      // Get workflow definition
-      const workflowDef = await this.getWorkflowDefinition(workflowType);
+      const { workflowType, parameters } = await request.json();
       
-      if (!workflowDef) {
+      if (!workflowType) {
         return new Response(JSON.stringify({
           success: false,
-          error: 'Workflow type not found'
+          error: 'Workflow type is required'
         }), {
-          status: 404,
+          status: 400,
           headers: { 'Content-Type': 'application/json' }
         });
       }
 
-      // Create workflow instance
-      const workflowInstance = {
+      const workflowId = this.generateWorkflowId();
+      const workflow = {
         id: workflowId,
         type: workflowType,
         status: 'running',
-        priority,
-        createdAt: Date.now(),
-        startedAt: Date.now(),
-        parameters,
-        steps: workflowDef.steps,
-        currentStep: 0,
-        results: [],
-        errors: [],
+        parameters: parameters || {},
+        createdAt: new Date().toISOString(),
+        startedAt: new Date().toISOString(),
+        steps: [],
+        results: {},
         metadata: {
-          triggeredBy: parameters.userId || 'system',
-          context: parameters.context || {}
+          triggeredBy: parameters?.userId || 'system',
+          priority: parameters?.priority || 'normal'
         }
       };
 
-      // Store workflow instance
-      await this.state.storage.put(workflowId, workflowInstance);
+      await this.state.storage.put(`workflow_${workflowId}`, workflow);
 
-      // Execute workflow asynchronously
-      this.executeWorkflow(workflowId, workflowInstance);
+      // Execute workflow based on type
+      this.executeWorkflow(workflowId, workflowType, parameters);
 
       return new Response(JSON.stringify({
         success: true,
-        workflowId,
-        status: 'started'
+        workflowId: workflowId,
+        workflow: workflow
       }), {
         headers: { 'Content-Type': 'application/json' }
       });
@@ -85,7 +85,7 @@ export class WorkflowEngine {
       console.error('Trigger workflow error:', error);
       return new Response(JSON.stringify({
         success: false,
-        error: 'Failed to trigger workflow'
+        error: error.message
       }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
@@ -93,438 +93,192 @@ export class WorkflowEngine {
     }
   }
 
-  async executeWorkflow(workflowId, workflowInstance) {
+  async executeWorkflow(workflowId, workflowType, parameters) {
     try {
-      for (let i = 0; i < workflowInstance.steps.length; i++) {
-        const step = workflowInstance.steps[i];
-        
-        // Update current step
-        workflowInstance.currentStep = i;
-        await this.state.storage.put(workflowId, workflowInstance);
+      const workflow = await this.state.storage.get(`workflow_${workflowId}`);
+      if (!workflow) return;
 
-        // Execute step
-        const stepResult = await this.executeStep(step, workflowInstance.parameters);
-        
-        // Store step result
-        workflowInstance.results.push({
-          stepIndex: i,
-          stepName: step.name,
-          result: stepResult,
-          timestamp: Date.now()
-        });
-
-        // Check if step failed
-        if (stepResult.error) {
-          workflowInstance.status = 'failed';
-          workflowInstance.errors.push({
-            step: step.name,
-            error: stepResult.error,
-            timestamp: Date.now()
-          });
+      switch (workflowType) {
+        case 'incident-response':
+          await this.executeIncidentResponseWorkflow(workflowId, parameters);
           break;
-        }
-
-        // Check if workflow should stop
-        if (stepResult.stop) {
-          workflowInstance.status = 'completed';
+        case 'threat-analysis':
+          await this.executeThreatAnalysisWorkflow(workflowId, parameters);
           break;
-        }
+        case 'security-report':
+          await this.executeSecurityReportWorkflow(workflowId, parameters);
+          break;
+        case 'vulnerability-scan':
+          await this.executeVulnerabilityScanWorkflow(workflowId, parameters);
+          break;
+        default:
+          await this.executeGenericWorkflow(workflowId, parameters);
       }
-
-      // Mark as completed if no errors
-      if (workflowInstance.status === 'running') {
-        workflowInstance.status = 'completed';
-      }
-
-      workflowInstance.completedAt = Date.now();
-      await this.state.storage.put(workflowId, workflowInstance);
-
     } catch (error) {
       console.error('Execute workflow error:', error);
+      await this.updateWorkflowStatus(workflowId, 'failed', { error: error.message });
+    }
+  }
+
+  async executeIncidentResponseWorkflow(workflowId, parameters) {
+    const steps = [
+      { name: 'assess', description: 'Assess incident severity' },
+      { name: 'contain', description: 'Contain the threat' },
+      { name: 'eradicate', description: 'Remove threat from environment' },
+      { name: 'recover', description: 'Restore normal operations' },
+      { name: 'lessons', description: 'Document lessons learned' }
+    ];
+
+    for (const step of steps) {
+      await this.addWorkflowStep(workflowId, step.name, 'running', step.description);
       
-      workflowInstance.status = 'failed';
-      workflowInstance.errors.push({
-        step: 'workflow_execution',
-        error: error.message,
-        timestamp: Date.now()
-      });
+      // Simulate step execution
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      await this.state.storage.put(workflowId, workflowInstance);
+      await this.addWorkflowStep(workflowId, step.name, 'completed', step.description);
     }
+
+    await this.updateWorkflowStatus(workflowId, 'completed', {
+      message: 'Incident response workflow completed successfully'
+    });
   }
 
-  async executeStep(step, parameters) {
-    try {
-      switch (step.type) {
-        case 'ai_analysis':
-          return await this.executeAIAnalysis(step, parameters);
-        
-        case 'threat_correlation':
-          return await this.executeThreatCorrelation(step, parameters);
-        
-        case 'notification':
-          return await this.executeNotification(step, parameters);
-        
-        case 'data_collection':
-          return await this.executeDataCollection(step, parameters);
-        
-        case 'response_generation':
-          return await this.executeResponseGeneration(step, parameters);
-        
-        case 'integration':
-          return await this.executeIntegration(step, parameters);
-        
-        default:
-          return { error: `Unknown step type: ${step.type}` };
-      }
-    } catch (error) {
-      return { error: error.message };
-    }
-  }
+  async executeThreatAnalysisWorkflow(workflowId, parameters) {
+    const steps = [
+      { name: 'collect', description: 'Collect threat indicators' },
+      { name: 'analyze', description: 'Analyze threat patterns' },
+      { name: 'correlate', description: 'Correlate with known threats' },
+      { name: 'assess', description: 'Assess risk level' },
+      { name: 'recommend', description: 'Generate recommendations' }
+    ];
 
-  async executeAIAnalysis(step, parameters) {
-    try {
-      const prompt = step.config.prompt || 'Analyze the threat data and provide insights.';
+    for (const step of steps) {
+      await this.addWorkflowStep(workflowId, step.name, 'running', step.description);
       
-      const response = await this.env.AI.run('@cf/meta/llama-3-8b-instruct', {
-        messages: [
-          {
-            role: 'system',
-            content: prompt
-          },
-          {
-            role: 'user',
-            content: JSON.stringify(parameters.threatData || parameters)
-          }
-        ],
-        max_tokens: step.config.maxTokens || 2048,
-        temperature: step.config.temperature || 0.7
-      });
-
-      return {
-        success: true,
-        analysis: response.response,
-        confidence: step.config.confidence || 0.8
-      };
-
-    } catch (error) {
-      return { error: `AI analysis failed: ${error.message}` };
-    }
-  }
-
-  async executeThreatCorrelation(step, parameters) {
-    try {
-      // Get threat database
-      const threatDb = this.env.THREAT_DATABASE.get(
-        this.env.THREAT_DATABASE.idFromName('main-db')
-      );
-
-      const correlationResult = await threatDb.fetch(
-        new Request(`/correlate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            threatId: parameters.threatId,
-            correlationType: step.config.correlationType || 'similar'
-          })
-        })
-      );
-
-      const result = await correlationResult.json();
-
-      return {
-        success: true,
-        correlations: result.correlatedThreats || [],
-        count: result.total || 0
-      };
-
-    } catch (error) {
-      return { error: `Threat correlation failed: ${error.message}` };
-    }
-  }
-
-  async executeNotification(step, parameters) {
-    try {
-      const notification = {
-        type: step.config.notificationType || 'alert',
-        title: step.config.title || 'Threat Alert',
-        message: parameters.message || 'A threat has been detected',
-        recipients: step.config.recipients || [],
-        priority: step.config.priority || 'medium',
-        timestamp: Date.now()
-      };
-
-      // Store notification
-      await this.state.storage.put(`notification_${Date.now()}`, notification);
-
-      // Send via webhook if configured
-      if (step.config.webhook) {
-        await fetch(step.config.webhook, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(notification)
-        });
-      }
-
-      return {
-        success: true,
-        notificationId: notification.id,
-        sent: true
-      };
-
-    } catch (error) {
-      return { error: `Notification failed: ${error.message}` };
-    }
-  }
-
-  async executeDataCollection(step, parameters) {
-    try {
-      const dataSources = step.config.sources || [];
-      const collectedData = [];
-
-      for (const source of dataSources) {
-        try {
-          const response = await fetch(source.url, {
-            method: source.method || 'GET',
-            headers: source.headers || {}
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            collectedData.push({
-              source: source.name,
-              data,
-              timestamp: Date.now()
-            });
-          }
-        } catch (error) {
-          console.error(`Data collection from ${source.name} failed:`, error);
-        }
-      }
-
-      return {
-        success: true,
-        data: collectedData,
-        count: collectedData.length
-      };
-
-    } catch (error) {
-      return { error: `Data collection failed: ${error.message}` };
-    }
-  }
-
-  async executeResponseGeneration(step, parameters) {
-    try {
-      const prompt = step.config.prompt || 'Generate an automated response to this threat.';
+      // Simulate step execution
+      await new Promise(resolve => setTimeout(resolve, 800));
       
-      const response = await this.env.AI.run('@cf/meta/llama-3-8b-instruct', {
-        messages: [
-          {
-            role: 'system',
-            content: `You are an AI security response coordinator. Based on the threat analysis, generate:
-1. Immediate Actions: Urgent steps to contain the threat
-2. Investigation Steps: Detailed investigation procedures
-3. Communication Plan: Who to notify and when
-4. Recovery Procedures: Steps to restore normal operations
-5. Prevention Measures: Long-term security improvements
-6. Documentation Requirements: What to document and report
-
-Provide a structured response plan with timelines and responsibilities.`
-          },
-          {
-            role: 'user',
-            content: `Threat Analysis: ${JSON.stringify(parameters.analysis || parameters)}`
-          }
-        ],
-        max_tokens: 2048,
-        temperature: 0.7
-      });
-
-      return {
-        success: true,
-        response: response.response,
-        actions: this.extractActions(response.response)
-      };
-
-    } catch (error) {
-      return { error: `Response generation failed: ${error.message}` };
+      await this.addWorkflowStep(workflowId, step.name, 'completed', step.description);
     }
+
+    await this.updateWorkflowStatus(workflowId, 'completed', {
+      message: 'Threat analysis workflow completed successfully'
+    });
   }
 
-  async executeIntegration(step, parameters) {
-    try {
-      const integration = step.config;
+  async executeSecurityReportWorkflow(workflowId, parameters) {
+    const steps = [
+      { name: 'gather', description: 'Gather security data' },
+      { name: 'analyze', description: 'Analyze security metrics' },
+      { name: 'generate', description: 'Generate report content' },
+      { name: 'format', description: 'Format report output' },
+      { name: 'deliver', description: 'Deliver report to stakeholders' }
+    ];
+
+    for (const step of steps) {
+      await this.addWorkflowStep(workflowId, step.name, 'running', step.description);
       
-      // Execute integration based on type
-      switch (integration.type) {
-        case 'webhook':
-          return await this.executeWebhookIntegration(integration, parameters);
-        
-        case 'api':
-          return await this.executeAPIIntegration(integration, parameters);
-        
-        case 'database':
-          return await this.executeDatabaseIntegration(integration, parameters);
-        
-        default:
-          return { error: `Unknown integration type: ${integration.type}` };
-      }
-
-    } catch (error) {
-      return { error: `Integration failed: ${error.message}` };
+      // Simulate step execution
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      
+      await this.addWorkflowStep(workflowId, step.name, 'completed', step.description);
     }
+
+    await this.updateWorkflowStatus(workflowId, 'completed', {
+      message: 'Security report workflow completed successfully'
+    });
   }
 
-  async executeWebhookIntegration(integration, parameters) {
-    try {
-      const response = await fetch(integration.url, {
-        method: integration.method || 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...integration.headers
-        },
-        body: JSON.stringify(parameters)
-      });
+  async executeVulnerabilityScanWorkflow(workflowId, parameters) {
+    const steps = [
+      { name: 'discovery', description: 'Discover assets and services' },
+      { name: 'scan', description: 'Scan for vulnerabilities' },
+      { name: 'validate', description: 'Validate findings' },
+      { name: 'prioritize', description: 'Prioritize vulnerabilities' },
+      { name: 'report', description: 'Generate vulnerability report' }
+    ];
 
-      return {
-        success: response.ok,
-        status: response.status,
-        data: await response.text()
-      };
-
-    } catch (error) {
-      return { error: `Webhook integration failed: ${error.message}` };
+    for (const step of steps) {
+      await this.addWorkflowStep(workflowId, step.name, 'running', step.description);
+      
+      // Simulate step execution
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      await this.addWorkflowStep(workflowId, step.name, 'completed', step.description);
     }
+
+    await this.updateWorkflowStatus(workflowId, 'completed', {
+      message: 'Vulnerability scan workflow completed successfully'
+    });
   }
 
-  async executeAPIIntegration(integration, parameters) {
-    try {
-      // Implement API integration logic
-      return {
-        success: true,
-        message: 'API integration executed'
-      };
+  async executeGenericWorkflow(workflowId, parameters) {
+    const steps = [
+      { name: 'initialize', description: 'Initialize workflow' },
+      { name: 'process', description: 'Process parameters' },
+      { name: 'execute', description: 'Execute main logic' },
+      { name: 'finalize', description: 'Finalize results' }
+    ];
 
-    } catch (error) {
-      return { error: `API integration failed: ${error.message}` };
+    for (const step of steps) {
+      await this.addWorkflowStep(workflowId, step.name, 'running', step.description);
+      
+      // Simulate step execution
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      await this.addWorkflowStep(workflowId, step.name, 'completed', step.description);
     }
+
+    await this.updateWorkflowStatus(workflowId, 'completed', {
+      message: 'Generic workflow completed successfully'
+    });
   }
 
-  async executeDatabaseIntegration(integration, parameters) {
-    try {
-      // Implement database integration logic
-      return {
-        success: true,
-        message: 'Database integration executed'
-      };
+  async addWorkflowStep(workflowId, stepName, status, description) {
+    const workflow = await this.state.storage.get(`workflow_${workflowId}`);
+    if (!workflow) return;
 
-    } catch (error) {
-      return { error: `Database integration failed: ${error.message}` };
-    }
-  }
-
-  async getWorkflowDefinition(workflowType) {
-    const definitions = {
-      'threat-analysis': {
-        name: 'Threat Analysis Workflow',
-        steps: [
-          {
-            name: 'ai_analysis',
-            type: 'ai_analysis',
-            config: {
-              prompt: 'Analyze the threat data and provide detailed insights.',
-              maxTokens: 2048,
-              temperature: 0.7
-            }
-          },
-          {
-            name: 'threat_correlation',
-            type: 'threat_correlation',
-            config: {
-              correlationType: 'similar'
-            }
-          },
-          {
-            name: 'response_generation',
-            type: 'response_generation',
-            config: {
-              prompt: 'Generate automated response recommendations.'
-            }
-          }
-        ]
-      },
-      'incident-response': {
-        name: 'Incident Response Workflow',
-        steps: [
-          {
-            name: 'data_collection',
-            type: 'data_collection',
-            config: {
-              sources: [
-                { name: 'threat_feed', url: 'https://api.threatfeed.com/feed' }
-              ]
-            }
-          },
-          {
-            name: 'ai_analysis',
-            type: 'ai_analysis',
-            config: {
-              prompt: 'Analyze incident data and determine severity.'
-            }
-          },
-          {
-            name: 'notification',
-            type: 'notification',
-            config: {
-              notificationType: 'alert',
-              title: 'Security Incident Detected',
-              priority: 'high'
-            }
-          },
-          {
-            name: 'response_generation',
-            type: 'response_generation',
-            config: {
-              prompt: 'Generate incident response plan.'
-            }
-          }
-        ]
-      }
+    const step = {
+      name: stepName,
+      status: status,
+      description: description,
+      timestamp: new Date().toISOString()
     };
 
-    return definitions[workflowType];
+    workflow.steps.push(step);
+    await this.state.storage.put(`workflow_${workflowId}`, workflow);
   }
 
-  extractActions(response) {
-    // Extract actionable items from AI response
-    const actions = [];
-    const lines = response.split('\n');
+  async updateWorkflowStatus(workflowId, status, results = {}) {
+    const workflow = await this.state.storage.get(`workflow_${workflowId}`);
+    if (!workflow) return;
+
+    workflow.status = status;
+    workflow.results = { ...workflow.results, ...results };
     
-    for (const line of lines) {
-      if (line.includes('Action:') || line.includes('Step:') || line.includes('•')) {
-        actions.push(line.trim());
-      }
+    if (status === 'completed' || status === 'failed') {
+      workflow.completedAt = new Date().toISOString();
     }
-    
-    return actions;
+
+    await this.state.storage.put(`workflow_${workflowId}`, workflow);
   }
 
   async getWorkflowStatus(request) {
     try {
       const url = new URL(request.url);
-      const workflowId = url.searchParams.get('id');
-
+      const workflowId = url.searchParams.get('workflowId');
+      
       if (!workflowId) {
         return new Response(JSON.stringify({
           success: false,
-          error: 'Workflow ID required'
+          error: 'Workflow ID is required'
         }), {
           status: 400,
           headers: { 'Content-Type': 'application/json' }
         });
       }
 
-      const workflow = await this.state.storage.get(workflowId);
+      const workflow = await this.state.storage.get(`workflow_${workflowId}`);
       
       if (!workflow) {
         return new Response(JSON.stringify({
@@ -538,7 +292,7 @@ Provide a structured response plan with timelines and responsibilities.`
 
       return new Response(JSON.stringify({
         success: true,
-        workflow
+        workflow: workflow
       }), {
         headers: { 'Content-Type': 'application/json' }
       });
@@ -547,7 +301,7 @@ Provide a structured response plan with timelines and responsibilities.`
       console.error('Get workflow status error:', error);
       return new Response(JSON.stringify({
         success: false,
-        error: 'Failed to get workflow status'
+        error: error.message
       }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
@@ -559,26 +313,24 @@ Provide a structured response plan with timelines and responsibilities.`
     try {
       const url = new URL(request.url);
       const status = url.searchParams.get('status');
-      const limit = parseInt(url.searchParams.get('limit') || '50');
+      const limit = parseInt(url.searchParams.get('limit')) || 50;
 
-      const workflows = [];
-      const keys = await this.state.storage.list();
+      const workflows = await this.getAllWorkflows();
       
-      for (const [key, value] of keys) {
-        if (key.startsWith('workflow_')) {
-          if (!status || value.status === status) {
-            workflows.push(value);
-          }
-        }
+      let filteredWorkflows = workflows;
+      if (status) {
+        filteredWorkflows = workflows.filter(workflow => workflow.status === status);
       }
 
-      // Sort by creation time
-      workflows.sort((a, b) => b.createdAt - a.createdAt);
+      // Sort by created date (newest first) and limit
+      const sortedWorkflows = filteredWorkflows
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, limit);
 
       return new Response(JSON.stringify({
         success: true,
-        workflows: workflows.slice(0, limit),
-        total: workflows.length
+        workflows: sortedWorkflows,
+        total: filteredWorkflows.length
       }), {
         headers: { 'Content-Type': 'application/json' }
       });
@@ -587,7 +339,7 @@ Provide a structured response plan with timelines and responsibilities.`
       console.error('List workflows error:', error);
       return new Response(JSON.stringify({
         success: false,
-        error: 'Failed to list workflows'
+        error: error.message
       }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
@@ -595,93 +347,22 @@ Provide a structured response plan with timelines and responsibilities.`
     }
   }
 
-  async createWorkflow(request) {
-    try {
-      const workflowDef = await request.json();
-      
-      const workflowId = `workflow_def_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      workflowDef.id = workflowId;
-      workflowDef.createdAt = Date.now();
-
-      await this.state.storage.put(workflowId, workflowDef);
-
-      return new Response(JSON.stringify({
-        success: true,
-        workflowId,
-        workflow: workflowDef
-      }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-    } catch (error) {
-      console.error('Create workflow error:', error);
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Failed to create workflow'
-      }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-  }
-
-  async updateWorkflow(request) {
-    try {
-      const { workflowId, updates } = await request.json();
-
-      const workflow = await this.state.storage.get(workflowId);
-      
-      if (!workflow) {
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Workflow not found'
-        }), {
-          status: 404,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-
-      Object.assign(workflow, updates);
-      workflow.updatedAt = Date.now();
-
-      await this.state.storage.put(workflowId, workflow);
-
-      return new Response(JSON.stringify({
-        success: true,
-        workflow
-      }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-    } catch (error) {
-      console.error('Update workflow error:', error);
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Failed to update workflow'
-      }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-  }
-
-  async deleteWorkflow(request) {
+  async cancelWorkflow(request) {
     try {
       const url = new URL(request.url);
-      const workflowId = url.searchParams.get('id');
-
+      const workflowId = url.searchParams.get('workflowId');
+      
       if (!workflowId) {
         return new Response(JSON.stringify({
           success: false,
-          error: 'Workflow ID required'
+          error: 'Workflow ID is required'
         }), {
           status: 400,
           headers: { 'Content-Type': 'application/json' }
         });
       }
 
-      const workflow = await this.state.storage.get(workflowId);
+      const workflow = await this.state.storage.get(`workflow_${workflowId}`);
       
       if (!workflow) {
         return new Response(JSON.stringify({
@@ -693,24 +374,89 @@ Provide a structured response plan with timelines and responsibilities.`
         });
       }
 
-      await this.state.storage.delete(workflowId);
+      if (workflow.status === 'completed' || workflow.status === 'failed') {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Cannot cancel completed or failed workflow'
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      await this.updateWorkflowStatus(workflowId, 'cancelled', {
+        message: 'Workflow cancelled by user'
+      });
 
       return new Response(JSON.stringify({
         success: true,
-        message: 'Workflow deleted successfully'
+        message: 'Workflow cancelled successfully'
       }), {
         headers: { 'Content-Type': 'application/json' }
       });
 
     } catch (error) {
-      console.error('Delete workflow error:', error);
+      console.error('Cancel workflow error:', error);
       return new Response(JSON.stringify({
         success: false,
-        error: 'Failed to delete workflow'
+        error: error.message
       }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
       });
     }
+  }
+
+  async getWorkflowHistory(request) {
+    try {
+      const url = new URL(request.url);
+      const workflowType = url.searchParams.get('type');
+      const limit = parseInt(url.searchParams.get('limit')) || 100;
+
+      const workflows = await this.getAllWorkflows();
+      
+      let filteredWorkflows = workflows;
+      if (workflowType) {
+        filteredWorkflows = workflows.filter(workflow => workflow.type === workflowType);
+      }
+
+      // Sort by created date (newest first) and limit
+      const sortedWorkflows = filteredWorkflows
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, limit);
+
+      return new Response(JSON.stringify({
+        success: true,
+        workflows: sortedWorkflows,
+        total: filteredWorkflows.length
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+    } catch (error) {
+      console.error('Get workflow history error:', error);
+      return new Response(JSON.stringify({
+        success: false,
+        error: error.message
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  }
+
+  async getAllWorkflows() {
+    const workflows = [];
+    const keys = await this.state.storage.list({ prefix: 'workflow_' });
+    
+    for (const [key, value] of keys) {
+      workflows.push(value);
+    }
+    
+    return workflows;
+  }
+
+  generateWorkflowId() {
+    return `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 }

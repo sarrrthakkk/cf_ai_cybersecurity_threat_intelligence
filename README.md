@@ -5,28 +5,31 @@ A cutting-edge AI-driven cybersecurity platform built on Cloudflare's edge infra
 ## 🚀 Features
 
 - **Conversational Threat Analysis**: Chat with AI to analyze threats using natural language
-- **Voice-Activated Security**: Hands-free threat monitoring and voice commands
-- **Real-Time Threat Intelligence**: Live threat updates and collaborative analysis
-- **AI-Powered Threat Correlation**: Automatic threat pattern recognition and campaign detection
-- **Automated Response Orchestration**: Intelligent workflow-based threat response
+- **Real-Time Threat Intelligence**: Live threat updates from NVD (National Vulnerability Database)
+- **AI-Powered Threat Analysis**: Intelligent threat pattern recognition and analysis
+- **Modern Chat Interface**: Professional cybersecurity UI with typing animations
+- **Threat Dashboard**: Real-time threat statistics and recent threat display
+- **Threat Ingestion**: Submit and analyze custom threat data
+- **Responsive Design**: Works seamlessly across all devices
 
 ## 🏗 Architecture
 
 ### Core Components
 
-- **Frontend**: Cloudflare Pages with modern chat interface and voice input
-- **AI Processing**: Llama 3.3 on Workers AI for threat analysis and natural language processing
-- **Workflow Engine**: Cloudflare Workflows for threat processing pipelines
-- **State Management**: Durable Objects for persistent threat intelligence database
-- **Real-time Communication**: WebSocket connections for live updates
+- **Frontend**: Single-page application with modern chat interface
+- **AI Processing**: Llama 3.1 8B via Cloudflare Workers AI for threat analysis
+- **Threat Database**: Durable Objects for persistent threat intelligence storage
+- **Real-time Updates**: Live threat feed with caching mechanism
+- **External APIs**: Integration with NVD for real-world CVE data
 
 ## 🛠 Tech Stack
 
 - **Frontend**: HTML5, CSS3, JavaScript (ES6+)
-- **Backend**: Cloudflare Workers, Durable Objects, Workflows
-- **AI**: Llama 3.3 via Workers AI
-- **Real-time**: WebSockets, Server-Sent Events
-- **Deployment**: Cloudflare Pages, Workers, Durable Objects
+- **Backend**: Cloudflare Workers, Durable Objects
+- **AI**: Llama 3.1 8B via Workers AI
+- **Real-time**: WebSocket connections for live updates
+- **Deployment**: Cloudflare Workers with Durable Objects
+- **External APIs**: NVD (National Vulnerability Database)
 
 ## 🚀 Quick Start
 
@@ -57,24 +60,25 @@ A cutting-edge AI-driven cybersecurity platform built on Cloudflare's edge infra
 
 4. **Set up environment variables**
    ```bash
-   cp .env.example .env
+   cp env.example .env
    # Edit .env with your Cloudflare account details
    ```
 
-5. **Deploy the application**
+5. **Start local development**
    ```bash
-   # Deploy Workers and Durable Objects
+   wrangler dev --local
+   ```
+
+6. **Deploy to production**
+   ```bash
    wrangler deploy
-   
-   # Deploy Pages frontend
-   wrangler pages deploy ./src/frontend
    ```
 
 ### Local Development
 
 1. **Start local development server**
    ```bash
-   wrangler dev
+   wrangler dev --local
    ```
 
 2. **Open your browser**
@@ -92,17 +96,17 @@ AI: "I've analyzed IP 192.168.1.100. Here's what I found:
      - Related Threats: 3 similar IPs detected in past 24h"
 ```
 
-### Voice Commands
-- "What threats are targeting my network right now?"
-- "Create a security report for my CISO meeting"
-- "Analyze this malware sample"
+### Threat Analysis
+- "Check this domain: example.com"
+- "Analyze this malware hash: abc123..."
+- "What are the latest vulnerabilities?"
+- "Create an incident response plan"
 
-### API Endpoints
-
-- `POST /api/threats/analyze` - Analyze threat data
-- `GET /api/threats/feed` - Get real-time threat feed
-- `POST /api/workflows/trigger` - Trigger threat response workflow
-- `WebSocket /ws/threats` - Real-time threat updates
+### Quick Actions
+- **Analyze IP**: Quick IP address analysis
+- **Scan Domain**: Domain reputation check
+- **Hash Analysis**: Malware hash analysis
+- **Submit Threat**: Submit custom threat data
 
 ## 🔧 Configuration
 
@@ -114,36 +118,138 @@ CLOUDFLARE_ACCOUNT_ID=your_account_id
 CLOUDFLARE_API_TOKEN=your_api_token
 
 # AI Configuration
-AI_MODEL=llama-3.3-70b-instruct
+AI_MODEL=@cf/meta/llama-3.1-8b-instruct
 AI_MAX_TOKENS=2048
+AI_TEMPERATURE=0.7
 
-# Security Configuration
-THREAT_FEED_API_KEY=your_threat_feed_key
-ENCRYPTION_KEY=your_encryption_key
+# Threat Intelligence
+THREAT_FEED_UPDATE_INTERVAL=300000
+MAX_THREAT_ANALYSIS_TIME=30000
 ```
 
 ### Wrangler Configuration
 
 The `wrangler.toml` file contains all necessary configuration for:
 - Workers AI model settings
-- Durable Objects bindings
-- Workflow definitions
+- Durable Objects bindings (ThreatDatabase, SessionManager, WorkflowEngine)
 - Environment variables
+- Worker entry point (`main-simple.js`)
 
-## 📊 Performance Metrics
+## 📊 API Endpoints
 
-- **Response Time**: < 200ms for threat analysis
-- **Throughput**: 1000+ concurrent threat analyses
-- **Global Latency**: < 50ms worldwide via Cloudflare edge
-- **Uptime**: 99.9% availability
+### Core APIs
+- `POST /api/chat` - Chat with AI for threat analysis
+- `GET /api/threats/feed` - Get real-time threat feed from NVD
+- `POST /api/threats/analyze` - Analyze specific threat data
+- `POST /api/threats/ingest` - Submit custom threat data
+- `WebSocket /ws/threats` - Real-time threat updates
+
+### Frontend Routes
+- `GET /` - Main application interface
+- `GET /styles.css` - Application styles
+- `GET /js/app.js` - Application JavaScript
+
+## 🎨 UI Features
+
+### Modern Interface
+- **Dark Theme**: Professional cybersecurity aesthetic
+- **Chat Interface**: Real-time conversation with AI
+- **Typing Animation**: Visual feedback during AI processing
+- **Threat Dashboard**: Live statistics and recent threats
+- **Analysis Panel**: Detailed threat analysis results
+- **Quick Actions**: One-click threat analysis tools
+
+### Responsive Design
+- **Desktop**: Full-featured interface with sidebar
+- **Tablet**: Optimized layout for touch devices
+- **Mobile**: Streamlined mobile experience
 
 ## 🔒 Security Features
 
-- End-to-end encryption for all communications
-- Zero-trust architecture
-- Threat data isolation
-- Audit logging for all operations
-- Rate limiting and DDoS protection
+- **Input Sanitization**: All user inputs are sanitized
+- **CORS Protection**: Proper CORS headers for API security
+- **Rate Limiting**: Built-in protection against abuse
+- **Data Validation**: Comprehensive input validation
+- **Error Handling**: Secure error responses
+
+## 📈 Performance Metrics
+
+- **Response Time**: < 2s for AI threat analysis
+- **Threat Feed**: Updates every 30 minutes with caching
+- **Global Latency**: < 50ms worldwide via Cloudflare edge
+- **Concurrent Users**: Supports multiple simultaneous users
+
+## 🤖 AI Capabilities
+
+### Specialized Prompts
+- **IP Analysis**: Detailed IP reputation and threat analysis
+- **Domain Analysis**: Domain reputation and security assessment
+- **Malware Analysis**: Hash analysis and threat classification
+- **Incident Response**: Structured incident response guidance
+- **General Cybersecurity**: Comprehensive security advice
+
+### AI Features
+- **Contextual Responses**: AI adapts to query type
+- **Professional Tone**: Polite and attentive communication
+- **Structured Output**: Organized analysis results
+- **Follow-up Suggestions**: Relevant next steps
+
+## 🗂 Project Structure
+
+```
+cf_ai_cybersecurity_threat_intelligence/
+├── src/
+│   ├── workers/
+│   │   └── main-simple.js      # Main worker with inlined frontend
+│   ├── durable-objects/
+│   │   ├── threat-database.js  # Threat data storage
+│   │   ├── session-manager.js  # Session management
+│   │   └── workflow-engine.js  # Workflow processing
+│   └── tests/
+│       └── test-suite.js       # Test suite
+├── wrangler.toml               # Cloudflare configuration
+├── package.json                # Dependencies and scripts
+├── .env.example               # Environment variables template
+├── deploy.sh                   # Deployment script
+├── README.md                   # This file
+├── PROMPTS.md                  # AI prompts documentation
+└── LOCAL-DEVELOPMENT.md        # Development guide
+```
+
+## 🚀 Deployment
+
+### Local Development
+```bash
+wrangler dev --local
+```
+
+### Production Deployment
+```bash
+wrangler deploy
+```
+
+### Environment Setup
+```bash
+# Copy environment template
+cp env.example .env
+
+# Edit with your Cloudflare credentials
+# Deploy with your configuration
+wrangler deploy
+```
+
+## 🧪 Testing
+
+Run the test suite:
+```bash
+npm test
+```
+
+The test suite covers:
+- Durable Object functionality
+- API endpoint testing
+- Threat data processing
+- Error handling
 
 ## 🤝 Contributing
 
@@ -160,6 +266,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - Cloudflare for providing the amazing edge computing platform
+- NVD (National Vulnerability Database) for threat intelligence data
 - The cybersecurity community for threat intelligence feeds
 - Open source AI models and libraries
 
@@ -168,8 +275,17 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 For support and questions:
 - Create an issue in this repository
 - Contact: [your-email@example.com]
-- Documentation: [link-to-docs]
+- Documentation: See LOCAL-DEVELOPMENT.md for detailed setup
 
 ---
 
 **Built with ❤️ for the Cloudflare Internship Program**
+
+## 🔄 Recent Updates
+
+- ✅ **Real AI Integration**: Now uses Cloudflare Workers AI with Llama 3.1 8B
+- ✅ **NVD Integration**: Real-world CVE data from National Vulnerability Database
+- ✅ **Modern UI**: Professional chat interface with typing animations
+- ✅ **Threat Dashboard**: Live threat statistics and recent threat display
+- ✅ **Caching System**: 30-minute cache for threat feed optimization
+- ✅ **Clean Architecture**: Simplified to main-simple.js with inlined frontend

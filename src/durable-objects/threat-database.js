@@ -22,6 +22,10 @@ export class ThreatDatabase {
         return this.getRecentThreats(request);
       case '/correlate':
         return this.correlateThreats(request);
+      case '/cache-store':
+        return this.storeCacheData(request);
+      case '/cache-get':
+        return this.getCacheData(request);
       default:
         return new Response('Not Found', { status: 404 });
     }
@@ -179,8 +183,11 @@ export class ThreatDatabase {
     }
   }
 
-  async getRecentThreats(limit = 50) {
+  async getRecentThreats(request) {
     try {
+      const url = new URL(request.url);
+      const limit = parseInt(url.searchParams.get('limit')) || 50;
+      
       const allThreats = await this.getAllThreats();
       
       // Sort by timestamp and limit
@@ -188,11 +195,23 @@ export class ThreatDatabase {
         .sort((a, b) => b.timestamp - a.timestamp)
         .slice(0, limit);
 
-      return recentThreats;
+      return new Response(JSON.stringify({
+        success: true,
+        threats: recentThreats
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
 
     } catch (error) {
       console.error('Get recent threats error:', error);
-      return [];
+      return new Response(JSON.stringify({
+        success: false,
+        error: error.message,
+        threats: []
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
   }
 
@@ -411,5 +430,82 @@ export class ThreatDatabase {
     });
     timeIndex.sort((a, b) => b.timestamp - a.timestamp);
     await this.state.storage.put('index:time', timeIndex.slice(0, 1000)); // Keep last 1000
+  }
+
+  // Cache support methods
+  async storeCacheData(request) {
+    try {
+      const data = await request.json();
+      const { key, data: cacheData, timestamp } = data;
+      
+      await this.state.storage.put(`cache_${key}`, {
+        data: cacheData,
+        timestamp: timestamp
+      });
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Cache data stored successfully'
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+    } catch (error) {
+      console.error('Store cache data error:', error);
+      return new Response(JSON.stringify({
+        success: false,
+        error: error.message
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  }
+
+  async getCacheData(request) {
+    try {
+      const url = new URL(request.url);
+      const key = url.searchParams.get('key');
+      
+      if (!key) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Cache key is required'
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      const cacheData = await this.state.storage.get(`cache_${key}`);
+      
+      if (!cacheData) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Cache data not found'
+        }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        data: cacheData.data,
+        timestamp: cacheData.timestamp
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+    } catch (error) {
+      console.error('Get cache data error:', error);
+      return new Response(JSON.stringify({
+        success: false,
+        error: error.message
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
   }
 }

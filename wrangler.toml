@@ -1,5 +1,5 @@
 name = "cf-ai-cybersecurity-threat-intelligence"
-main = "src/workers/main.js"
+main = "src/workers/main-simple.js"
 compatibility_date = "2024-01-01"
 account_id = "084ba993d2dd0763d0de25695d423147"
 
@@ -27,7 +27,7 @@ new_sqlite_classes = ["ThreatDatabase", "SessionManager", "WorkflowEngine"]
 
 # Environment Variables
 [vars]
-ENVIRONMENT = "development"
+ENVIRONMENT = "production"
 MAX_THREAT_ANALYSIS_TIME = "30000"
 THREAT_FEED_UPDATE_INTERVAL = "300000"
 AI_MAX_TOKENS = "2048"

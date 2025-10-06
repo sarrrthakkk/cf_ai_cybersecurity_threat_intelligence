@@ -1,5 +1,5 @@
 // Session Manager Durable Object
-// Manages user sessions and conversation history
+// Handles user sessions, authentication, and session state
 
 export class SessionManager {
   constructor(state, env) {
@@ -11,62 +11,57 @@ export class SessionManager {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    switch (path) {
-      case '/create':
-        return this.createSession(request);
-      case '/get':
-        return this.getSession(request);
-      case '/add-message':
-        return this.addMessage(request);
-      case '/get-history':
-        return this.getHistory(request);
-      case '/update':
-        return this.updateSession(request);
-      case '/delete':
-        return this.deleteSession(request);
-      default:
-        return new Response('Not Found', { status: 404 });
+    try {
+      switch (path) {
+        case '/create':
+          return this.createSession(request);
+        case '/get':
+          return this.getSession(request);
+        case '/update':
+          return this.updateSession(request);
+        case '/delete':
+          return this.deleteSession(request);
+        case '/list':
+          return this.listSessions(request);
+        default:
+          return new Response('Not Found', { status: 404 });
+      }
+    } catch (error) {
+      console.error('SessionManager error:', error);
+      return new Response(JSON.stringify({
+        success: false,
+        error: error.message
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
   }
 
   async createSession(request) {
     try {
-      const { userId, sessionType = 'chat' } = await request.json();
-      
-      const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const sessionData = await request.json();
+      const sessionId = this.generateSessionId();
       
       const session = {
         id: sessionId,
-        userId: userId || 'anonymous',
-        type: sessionType,
-        createdAt: Date.now(),
-        lastActivity: Date.now(),
-        status: 'active',
-        settings: {
-          language: 'en',
-          voiceEnabled: false,
-          notifications: true,
-          theme: 'dark'
-        },
-        context: {
-          currentThreat: null,
-          analysisMode: 'standard',
-          preferences: {}
-        },
-        messages: [],
+        userId: sessionData.userId || 'anonymous',
+        createdAt: new Date().toISOString(),
+        lastAccessed: new Date().toISOString(),
+        data: sessionData.data || {},
         metadata: {
           userAgent: request.headers.get('User-Agent'),
           ipAddress: request.headers.get('CF-Connecting-IP'),
-          country: request.headers.get('CF-IPCountry')
+          ...sessionData.metadata
         }
       };
 
-      await this.state.storage.put(sessionId, session);
+      await this.state.storage.put(`session_${sessionId}`, session);
 
       return new Response(JSON.stringify({
         success: true,
-        sessionId,
-        session
+        sessionId: sessionId,
+        session: session
       }), {
         headers: { 'Content-Type': 'application/json' }
       });
@@ -75,7 +70,7 @@ export class SessionManager {
       console.error('Create session error:', error);
       return new Response(JSON.stringify({
         success: false,
-        error: 'Failed to create session'
+        error: error.message
       }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
@@ -86,19 +81,19 @@ export class SessionManager {
   async getSession(request) {
     try {
       const url = new URL(request.url);
-      const sessionId = url.searchParams.get('id');
-
+      const sessionId = url.searchParams.get('sessionId');
+      
       if (!sessionId) {
         return new Response(JSON.stringify({
           success: false,
-          error: 'Session ID required'
+          error: 'Session ID is required'
         }), {
           status: 400,
           headers: { 'Content-Type': 'application/json' }
         });
       }
 
-      const session = await this.state.storage.get(sessionId);
+      const session = await this.state.storage.get(`session_${sessionId}`);
       
       if (!session) {
         return new Response(JSON.stringify({
@@ -110,13 +105,13 @@ export class SessionManager {
         });
       }
 
-      // Update last activity
-      session.lastActivity = Date.now();
-      await this.state.storage.put(sessionId, session);
+      // Update last accessed time
+      session.lastAccessed = new Date().toISOString();
+      await this.state.storage.put(`session_${sessionId}`, session);
 
       return new Response(JSON.stringify({
         success: true,
-        session
+        session: session
       }), {
         headers: { 'Content-Type': 'application/json' }
       });
@@ -125,131 +120,7 @@ export class SessionManager {
       console.error('Get session error:', error);
       return new Response(JSON.stringify({
         success: false,
-        error: 'Failed to retrieve session'
-      }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-  }
-
-  async addMessage(request) {
-    try {
-      const { sessionId, message, response, messageType = 'text' } = await request.json();
-
-      if (!sessionId) {
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Session ID required'
-        }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-
-      const session = await this.state.storage.get(sessionId);
-      
-      if (!session) {
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Session not found'
-        }), {
-          status: 404,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-
-      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      const messageData = {
-        id: messageId,
-        timestamp: Date.now(),
-        type: messageType,
-        content: message,
-        response: response || null,
-        metadata: {
-          length: message.length,
-          language: await this.detectLanguage(message)
-        }
-      };
-
-      // Add message to session
-      session.messages.push(messageData);
-      session.lastActivity = Date.now();
-
-      // Keep only last 100 messages to prevent storage bloat
-      if (session.messages.length > 100) {
-        session.messages = session.messages.slice(-100);
-      }
-
-      await this.state.storage.put(sessionId, session);
-
-      return new Response(JSON.stringify({
-        success: true,
-        messageId,
-        message: messageData
-      }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-    } catch (error) {
-      console.error('Add message error:', error);
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Failed to add message'
-      }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-  }
-
-  async getHistory(request) {
-    try {
-      const url = new URL(request.url);
-      const sessionId = url.searchParams.get('id');
-      const limit = parseInt(url.searchParams.get('limit') || '50');
-
-      if (!sessionId) {
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Session ID required'
-        }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-
-      const session = await this.state.storage.get(sessionId);
-      
-      if (!session) {
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Session not found'
-        }), {
-          status: 404,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-
-      // Get recent messages
-      const recentMessages = session.messages
-        .sort((a, b) => b.timestamp - a.timestamp)
-        .slice(0, limit);
-
-      return new Response(JSON.stringify({
-        success: true,
-        messages: recentMessages,
-        total: session.messages.length
-      }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-    } catch (error) {
-      console.error('Get history error:', error);
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Failed to retrieve history'
+        error: error.message
       }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
@@ -259,19 +130,19 @@ export class SessionManager {
 
   async updateSession(request) {
     try {
-      const { sessionId, updates } = await request.json();
-
+      const { sessionId, data } = await request.json();
+      
       if (!sessionId) {
         return new Response(JSON.stringify({
           success: false,
-          error: 'Session ID required'
+          error: 'Session ID is required'
         }), {
           status: 400,
           headers: { 'Content-Type': 'application/json' }
         });
       }
 
-      const session = await this.state.storage.get(sessionId);
+      const session = await this.state.storage.get(`session_${sessionId}`);
       
       if (!session) {
         return new Response(JSON.stringify({
@@ -283,15 +154,15 @@ export class SessionManager {
         });
       }
 
-      // Update session with provided updates
-      Object.assign(session, updates);
-      session.lastActivity = Date.now();
-
-      await this.state.storage.put(sessionId, session);
+      // Update session data
+      session.data = { ...session.data, ...data };
+      session.lastAccessed = new Date().toISOString();
+      
+      await this.state.storage.put(`session_${sessionId}`, session);
 
       return new Response(JSON.stringify({
         success: true,
-        session
+        session: session
       }), {
         headers: { 'Content-Type': 'application/json' }
       });
@@ -300,7 +171,7 @@ export class SessionManager {
       console.error('Update session error:', error);
       return new Response(JSON.stringify({
         success: false,
-        error: 'Failed to update session'
+        error: error.message
       }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
@@ -311,31 +182,19 @@ export class SessionManager {
   async deleteSession(request) {
     try {
       const url = new URL(request.url);
-      const sessionId = url.searchParams.get('id');
-
+      const sessionId = url.searchParams.get('sessionId');
+      
       if (!sessionId) {
         return new Response(JSON.stringify({
           success: false,
-          error: 'Session ID required'
+          error: 'Session ID is required'
         }), {
           status: 400,
           headers: { 'Content-Type': 'application/json' }
         });
       }
 
-      const session = await this.state.storage.get(sessionId);
-      
-      if (!session) {
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Session not found'
-        }), {
-          status: 404,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-
-      await this.state.storage.delete(sessionId);
+      await this.state.storage.delete(`session_${sessionId}`);
 
       return new Response(JSON.stringify({
         success: true,
@@ -348,7 +207,7 @@ export class SessionManager {
       console.error('Delete session error:', error);
       return new Response(JSON.stringify({
         success: false,
-        error: 'Failed to delete session'
+        error: error.message
       }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
@@ -356,40 +215,56 @@ export class SessionManager {
     }
   }
 
-  async detectLanguage(text) {
-    // Simple language detection based on common patterns
-    const patterns = {
-      'en': /[a-zA-Z]/,
-      'es': /[ñáéíóúü]/,
-      'fr': /[àâäéèêëïîôöùûüÿç]/,
-      'de': /[äöüß]/,
-      'zh': /[\u4e00-\u9fff]/,
-      'ja': /[\u3040-\u309f\u30a0-\u30ff]/,
-      'ko': /[\uac00-\ud7af]/,
-      'ar': /[\u0600-\u06ff]/
-    };
+  async listSessions(request) {
+    try {
+      const url = new URL(request.url);
+      const userId = url.searchParams.get('userId');
+      const limit = parseInt(url.searchParams.get('limit')) || 50;
 
-    for (const [lang, pattern] of Object.entries(patterns)) {
-      if (pattern.test(text)) {
-        return lang;
+      const sessions = await this.getAllSessions();
+      
+      let filteredSessions = sessions;
+      if (userId) {
+        filteredSessions = sessions.filter(session => session.userId === userId);
       }
-    }
 
-    return 'en'; // Default to English
+      // Sort by last accessed (newest first) and limit
+      const sortedSessions = filteredSessions
+        .sort((a, b) => new Date(b.lastAccessed) - new Date(a.lastAccessed))
+        .slice(0, limit);
+
+      return new Response(JSON.stringify({
+        success: true,
+        sessions: sortedSessions,
+        total: filteredSessions.length
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+    } catch (error) {
+      console.error('List sessions error:', error);
+      return new Response(JSON.stringify({
+        success: false,
+        error: error.message
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
   }
 
-  // Cleanup old sessions (called periodically)
-  async cleanupOldSessions() {
-    const now = Date.now();
-    const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
-
-    const sessions = await this.state.storage.list();
+  async getAllSessions() {
+    const sessions = [];
+    const keys = await this.state.storage.list({ prefix: 'session_' });
     
-    for (const [key, session] of sessions) {
-      if (key.startsWith('session_') && 
-          (now - session.lastActivity) > maxAge) {
-        await this.state.storage.delete(key);
-      }
+    for (const [key, value] of keys) {
+      sessions.push(value);
     }
+    
+    return sessions;
+  }
+
+  generateSessionId() {
+    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 }
